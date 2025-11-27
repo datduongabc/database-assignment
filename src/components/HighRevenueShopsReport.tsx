@@ -9,32 +9,40 @@ interface ShopData {
   totalRevenue: number;
 }
 
-const mockShopData: ShopData[] = [
-  { shopId: 'SHP001', shopName: 'Tech Galaxy Store', totalOrders: 1247, totalRevenue: 2847500000 },
-  { shopId: 'SHP002', shopName: 'Fashion Paradise', totalOrders: 2156, totalRevenue: 1923400000 },
-  { shopId: 'SHP003', shopName: 'Home Essentials Hub', totalOrders: 892, totalRevenue: 1567800000 },
-  { shopId: 'SHP004', shopName: 'Beauty & Wellness Co', totalOrders: 1543, totalRevenue: 1289300000 },
-  { shopId: 'SHP005', shopName: 'Sports Elite Pro', totalOrders: 678, totalRevenue: 987600000 },
-  { shopId: 'SHP006', shopName: 'Electronics World', totalOrders: 1834, totalRevenue: 3456700000 },
-  { shopId: 'SHP007', shopName: 'Trendy Apparel Shop', totalOrders: 945, totalRevenue: 756200000 },
-  { shopId: 'SHP008', shopName: 'Smart Gadgets Plus', totalOrders: 1123, totalRevenue: 2134500000 },
-];
-
 export function HighRevenueShopsReport() {
   const [reportYear, setReportYear] = useState('2025');
   const [minRevenue, setMinRevenue] = useState('');
   const [showResults, setShowResults] = useState(false);
-  const [filteredData, setFilteredData] = useState<ShopData[]>(mockShopData);
+  const [filteredData, setFilteredData] = useState<ShopData[]>([]); // Dữ liệu thật
+  const [isLoading, setIsLoading] = useState(false); // Trạng thái loading
 
-  const handleGenerateReport = () => {
-    // Filter data based on minimum revenue threshold
-    const threshold = minRevenue ? parseFloat(minRevenue.replace(/,/g, '')) : 0;
-    const filtered = mockShopData.filter(shop => shop.totalRevenue >= threshold);
-    setFilteredData(filtered);
-    setShowResults(true);
+  const handleGenerateReport = async () => {
+    setIsLoading(true);
+    setShowResults(false);
+
+    try {
+      // Xử lý số tiền nhập vào (bỏ dấu phẩy nếu có)
+      const threshold = minRevenue ? parseFloat(minRevenue.replace(/,/g, '')) : 0;
+      
+      // Gọi API Flask
+      const response = await fetch(`http://127.0.0.1:5000/api/reports/high-revenue?year=${reportYear}&min_revenue=${threshold}`);
+      
+      if (!response.ok) {
+        throw new Error('Lỗi kết nối Server');
+      }
+
+      const data = await response.json();
+      setFilteredData(data);
+      setShowResults(true);
+    } catch (error) {
+      console.error("Lỗi báo cáo:", error);
+      alert("Không thể lấy dữ liệu báo cáo!");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // Calculate summary statistics
+  // Tính toán thống kê
   const totalShops = filteredData.length;
   const highestRevenue = filteredData.length > 0 
     ? Math.max(...filteredData.map(s => s.totalRevenue)) 
@@ -43,7 +51,7 @@ export function HighRevenueShopsReport() {
     ? Math.round(filteredData.reduce((sum, s) => sum + s.totalOrders, 0) / filteredData.length)
     : 0;
 
-  // Prepare chart data (Top 5)
+  // Dữ liệu cho biểu đồ (Top 5)
   const chartData = [...filteredData]
     .sort((a, b) => b.totalRevenue - a.totalRevenue)
     .slice(0, 5)
@@ -76,7 +84,7 @@ export function HighRevenueShopsReport() {
             <select
               value={reportYear}
               onChange={(e) => setReportYear(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EE4D2D] focus:border-transparent bg-white"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EE4D2D] bg-white"
             >
               <option value="2025">2025</option>
               <option value="2024">2024</option>
@@ -92,11 +100,11 @@ export function HighRevenueShopsReport() {
               Minimum Revenue Threshold <span className="text-[#EF4444]">*</span>
             </label>
             <input
-              type="text"
-              placeholder="e.g., 10,000,000 VND"
+              type="number"
+              placeholder="e.g., 10000000"
               value={minRevenue}
               onChange={(e) => setMinRevenue(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EE4D2D] focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#EE4D2D]"
             />
             <p className="text-gray-500 text-xs mt-1">SQL Parameter: @MinRevenue</p>
           </div>
@@ -105,10 +113,17 @@ export function HighRevenueShopsReport() {
           <div className="flex items-end">
             <button
               onClick={handleGenerateReport}
-              className="w-full px-6 py-2 bg-[#EE4D2D] text-white rounded-lg hover:bg-[#D43F1F] transition-colors flex items-center justify-center gap-2"
+              disabled={isLoading}
+              className={`w-full px-6 py-2 text-white rounded-lg transition-colors flex items-center justify-center gap-2 ${
+                isLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-[#EE4D2D] hover:bg-[#D43F1F]'
+              }`}
             >
-              <FileText className="w-4 h-4" />
-              Generate Report
+              {isLoading ? 'Processing...' : (
+                <>
+                  <FileText className="w-4 h-4" />
+                  Generate Report
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -116,7 +131,7 @@ export function HighRevenueShopsReport() {
 
       {/* Summary Cards */}
       {showResults && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-in">
           {/* Total Shops Found */}
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between">
@@ -160,11 +175,11 @@ export function HighRevenueShopsReport() {
 
       {/* Data Table */}
       {showResults && (
-        <div className="bg-white rounded-lg shadow-sm">
+        <div className="bg-white rounded-lg shadow-sm animate-slide-in">
           <div className="p-6 border-b border-gray-200">
             <h3 className="text-gray-900">Query Results</h3>
             <p className="text-gray-600 mt-1">
-              Showing shops with revenue ≥ ₫{minRevenue || '0'} for year {reportYear}
+              Showing shops with revenue ≥ ₫{parseFloat(minRevenue || '0').toLocaleString()} for year {reportYear}
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -173,46 +188,33 @@ export function HighRevenueShopsReport() {
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="px-6 py-3 text-center text-gray-700">Shop ID</th>
                   <th className="px-6 py-3 text-left text-gray-700">Shop Name</th>
-                  <th className="px-6 py-3 text-right text-gray-700">
-                    Total Orders
-                    <span className="block text-gray-500 text-xs font-normal">COUNT(DISTINCT Order_ID)</span>
-                  </th>
-                  <th className="px-6 py-3 text-right text-gray-700">
-                    Total Revenue
-                    <span className="block text-gray-500 text-xs font-normal">SUM(Quantity * Price)</span>
-                  </th>
+                  <th className="px-6 py-3 text-right text-gray-700">Total Orders</th>
+                  <th className="px-6 py-3 text-right text-gray-700">Total Revenue</th>
                   <th className="px-6 py-3 text-center text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredData.map((shop, index) => (
-                  <tr 
-                    key={shop.shopId} 
-                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-gray-900">{shop.shopId}</span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-gray-900">{shop.shopName}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-gray-900">{shop.totalOrders.toLocaleString()}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <span className="text-[#EE4D2D]">₫{shop.totalRevenue.toLocaleString()}</span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <button
-                        className="inline-flex items-center gap-2 px-3 py-1 border border-[#EE4D2D] text-[#EE4D2D] rounded-lg hover:bg-[#FFF6F4] transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View Details
-                      </button>
+                {filteredData.length > 0 ? (
+                  filteredData.map((shop) => (
+                    <tr key={shop.shopId} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4 text-center text-gray-900">{shop.shopId}</td>
+                      <td className="px-6 py-4 text-gray-900">{shop.shopName}</td>
+                      <td className="px-6 py-4 text-right text-gray-900">{shop.totalOrders.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right text-[#EE4D2D] font-medium">₫{shop.totalRevenue.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-center">
+                        <button className="inline-flex items-center gap-2 px-3 py-1 border border-[#EE4D2D] text-[#EE4D2D] rounded-lg hover:bg-[#FFF6F4]">
+                          <Eye className="w-4 h-4" /> View Details
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="text-center py-8 text-gray-500">
+                      No shops found matching the criteria.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -221,7 +223,7 @@ export function HighRevenueShopsReport() {
 
       {/* Horizontal Bar Chart */}
       {showResults && chartData.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
+        <div className="bg-white rounded-lg shadow-sm p-6 animate-slide-in">
           <h3 className="text-gray-900 mb-4">Top 5 Shops by Revenue</h3>
           <ResponsiveContainer width="100%" height={350}>
             <BarChart 
@@ -234,41 +236,26 @@ export function HighRevenueShopsReport() {
                 type="number"
                 stroke="#6B7280"
                 style={{ fontSize: '12px' }}
-                tickFormatter={(value) => `₫${(value / 1000000000).toFixed(1)}B`}
+                tickFormatter={(value) => `₫${(value / 1000000).toFixed(0)}M`}
               />
               <YAxis 
                 type="category"
                 dataKey="name" 
                 stroke="#6B7280"
                 style={{ fontSize: '12px' }}
-                width={180}
+                width={150}
               />
               <Tooltip 
                 formatter={(value: number) => [`₫${value.toLocaleString()}`, 'Revenue']}
-                contentStyle={{ 
-                  borderRadius: '8px', 
-                  border: '1px solid #E5E7EB',
-                  fontSize: '14px'
-                }}
+                contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB' }}
               />
-              <Bar dataKey="revenue" radius={[0, 8, 8, 0]}>
+              <Bar dataKey="revenue" radius={[0, 4, 4, 0]}>
                 {chartData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill="#EE4D2D" />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* No Results Message */}
-      {showResults && filteredData.length === 0 && (
-        <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-          <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-gray-900 mb-2">No Shops Found</h3>
-          <p className="text-gray-600">
-            No shops meet the specified criteria. Try adjusting your filters.
-          </p>
         </div>
       )}
     </div>
