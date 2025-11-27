@@ -1,13 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Upload, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { Toast } from './Toast';
+
+// 1. Định nghĩa lại interface Product để dùng
+interface Product {
+  id: string;
+  name: string;
+  originalPrice: number;
+  stock: number;
+  description: string;
+}
 
 interface AddProductModalProps {
   isOpen: boolean;
   onClose: () => void;
+  productToEdit?: Product | null; // Nhận thêm prop này từ cha
 }
 
-export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
+export function AddProductModal({ isOpen, onClose, productToEdit }: AddProductModalProps) {
   const [productName, setProductName] = useState('');
   const [category, setCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
@@ -28,6 +38,33 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
     'beauty': ['Skincare', 'Makeup', 'Hair Care', 'Fragrance', 'Tools'],
     'sports': ['Exercise Equipment', 'Outdoor Gear', 'Sports Apparel', 'Accessories'],
   };
+
+  // 2. Dùng useEffect để điền dữ liệu khi mở Modal
+  useEffect(() => {
+    if (isOpen) {
+      if (productToEdit) {
+        // --- CHẾ ĐỘ SỬA: Điền dữ liệu cũ vào form ---
+        setProductName(productToEdit.name);
+        setOriginalPrice(productToEdit.originalPrice.toString());
+        setStock(productToEdit.stock.toString());
+        setDescription(productToEdit.description || '');
+        
+        // Vì DB chưa lưu Ảnh và Category, ta điền giả để form không bị lỗi validate
+        setImages(['https://placehold.co/600x400']); 
+        setCategory('electronics'); 
+        setSubcategory('Smartphones');
+      } else {
+        // --- CHẾ ĐỘ THÊM MỚI: Reset form trắng tinh ---
+        setProductName('');
+        setOriginalPrice('');
+        setStock('');
+        setDescription('');
+        setImages([]);
+        setCategory('');
+        setSubcategory('');
+      }
+    }
+  }, [isOpen, productToEdit]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -63,7 +100,8 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
     }
   };
 
-  const handleSubmit = () => {
+  // 3. Hàm Submit thông minh (Xử lý cả Thêm và Sửa)
+  const handleSubmit = async () => {
     // Validation
     if (!productName || !category || !description || !originalPrice || !stock || images.length === 0) {
       setShowToast(true);
@@ -78,18 +116,46 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
       return;
     }
 
-    // Submit logic would go here
-    console.log('Product submitted:', {
-      productName,
-      category,
-      subcategory,
-      description,
-      originalPrice,
-      stock,
-      images,
-    });
-    
-    onClose();
+    // Chuẩn bị dữ liệu
+    const productData = {
+      name: productName,
+      originalPrice: parseFloat(originalPrice),
+      stock: parseInt(stock),
+      description: description
+    };
+
+    try {
+      let response;
+      
+      if (productToEdit) {
+        // --- GỌI API SỬA (PUT) ---
+        response = await fetch(`http://127.0.0.1:5000/api/products/${productToEdit.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(productData), // API Sửa không cần gửi ID trong body
+        });
+      } else {
+        // --- GỌI API THÊM MỚI (POST) ---
+        const newId = 'PRD' + Math.floor(Math.random() * 100000);
+        response = await fetch('http://127.0.0.1:5000/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...productData, id: newId }), // API Thêm cần ID
+        });
+      }
+
+      if (response.ok) {
+        alert(productToEdit ? "Cập nhật thành công!" : "Thêm mới thành công!");
+        onClose();
+        window.location.reload();
+      } else {
+        const errorData = await response.json();
+        alert("Lỗi Server: " + (errorData.error || "Thao tác thất bại"));
+      }
+    } catch (error) {
+      console.error("Lỗi kết nối:", error);
+      alert("Không thể kết nối đến Server Backend!");
+    }
   };
 
   if (!isOpen) return null;
@@ -100,9 +166,11 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
       <div className="fixed inset-0 z-50 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            {/* Header */}
+            {/* Header: Đổi tiêu đề động */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-              <h2 className="text-gray-900">Basic Information</h2>
+              <h2 className="text-gray-900">
+                {productToEdit ? 'Edit Product' : 'Basic Information'}
+              </h2>
               <button
                 onClick={onClose}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -300,7 +368,7 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
               </div>
             </div>
 
-            {/* Footer */}
+            {/* Footer: Nút bấm đổi chữ động */}
             <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
               <button
                 onClick={onClose}
@@ -312,7 +380,7 @@ export function AddProductModal({ isOpen, onClose }: AddProductModalProps) {
                 onClick={handleSubmit}
                 className="px-6 py-2 bg-[#EE4D2D] text-white rounded-lg hover:bg-[#D43F1F] transition-colors"
               >
-                Save & Publish
+                {productToEdit ? 'Update Product' : 'Save & Publish'}
               </button>
             </div>
           </div>
